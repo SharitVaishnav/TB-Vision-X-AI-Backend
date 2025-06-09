@@ -8,3 +8,4 @@ lime==0.2.0.1
 opencv-python-headless
 gunicorn
 scikit-image==0.21.0
+werkzeug<2.1.0
