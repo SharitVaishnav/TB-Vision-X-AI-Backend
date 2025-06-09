@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: tb-vision-x-ai-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 600 --workers 1 --threads 1 --worker-class gthread --worker-tmp-dir /tmp --max-requests 1000 --max-requests-jitter 50 app.app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: TF_CPP_MIN_LOG_LEVEL
+        value: 2
+      - key: TF_FORCE_GPU_ALLOW_GROWTH
+        value: "true"
+      - key: TF_MEMORY_ALLOCATION
+        value: "0.8"
+      - key: TF_XLA_FLAGS
+        value: "--tf_xla_cpu_global_jit"
+      - key: MPLCONFIGDIR
+        value: "/tmp/matplotlib"
+      - key: HF_HOME
+        value: "/tmp/huggingface"
+      - key: TRANSFORMERS_CACHE
+        value: "/tmp/huggingface"
+    plan: standard
+    healthCheckPath: /predict
+    autoDeploy: true 
