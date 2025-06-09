@@ -1,0 +1,53 @@
+def GradCAM(model, image, interpolant=0.5, plot_results=True):
+    assert (interpolant > 0 and interpolant < 1), "Heatmap Interpolation Must Be Between 0 - 1"
+
+    # Preprocess image and make prediction using our model
+    original_img = np.asarray(image, dtype=np.float32)
+    img = np.expand_dims(original_img, axis=0)
+
+    # Predict
+    prediction = model.predict(img)
+    prediction_idx = np.argmax(prediction)
+
+    # Find the last convolutional layer
+    last_conv_layer = None
+    for layer in reversed(model.layers):
+        if isinstance(layer, tf.keras.layers.Conv2D):
+            last_conv_layer = layer
+            break
+
+    if last_conv_layer is None:
+        raise ValueError("No convolutional layer found in the model.")
+
+    # Create a model to extract feature maps and predictions
+    gradient_model = Model(inputs=model.inputs, outputs=[last_conv_layer.output, model.output])
+
+    # Compute gradient of top predicted class
+    with tf.GradientTape() as tape:
+        conv2d_out, prediction = gradient_model(img)
+        loss = prediction[:, prediction_idx]
+
+    gradients = tape.gradient(loss, conv2d_out)
+
+    output = conv2d_out[0]
+    weights = tf.reduce_mean(gradients[0], axis=(0, 1))
+
+    activation_map = np.zeros(output.shape[0:2], dtype=np.float32)
+
+    for idx, weight in enumerate(weights):
+        activation_map += weight * output[:, :, idx]
+
+    activation_map = cv2.resize(activation_map.numpy(), (original_img.shape[1], original_img.shape[0]))
+    activation_map = np.maximum(activation_map, 0)
+    activation_map = (activation_map - activation_map.min()) / (activation_map.max() - activation_map.min())
+    activation_map = np.uint8(255 * activation_map)
+
+    heatmap = cv2.applyColorMap(activation_map, cv2.COLORMAP_JET)
+
+    original_img = np.uint8((original_img - original_img.min()) / (original_img.max() - original_img.min()) * 255)
+    cvt_heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+
+    if plot_results:
+        plt.imshow(np.uint8(original_img * interpolant + cvt_heatmap * (1 - interpolant)))
+    else:
+        return cvt_heatmap
