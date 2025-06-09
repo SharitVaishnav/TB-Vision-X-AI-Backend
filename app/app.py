@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from huggingface_hub import hf_hub_download
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import tensorflow as tf
@@ -43,23 +44,28 @@ tf.config.optimizer.set_experimental_options({
 
 # Load DenseNet model with memory optimization
 try:
-    logger.info("Loading DenseNet model...")
-    # Clear any existing models from memory
+    logger.info("Loading DenseNet model from Hugging Face Hub...")
+    
+    # Clear session to free memory
     tf.keras.backend.clear_session()
     gc.collect()
-    
-    # Load model with memory optimization
-    model = tf.keras.models.load_model(
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'tb_detector_model_densenet.h5'),
-        compile=False  # Don't compile the model to save memory
+
+    # Download model file from Hugging Face Model Hub
+    model_path = hf_hub_download(
+        repo_id="sharit2846/tb-densenet-model",
+        filename="tb_detector_model_densenet.h5"
     )
-    
-    # Create a prediction function
+
+    # Load the model without compiling
+    model = tf.keras.models.load_model(model_path, compile=False)
+
+    # Define inference function
     @tf.function
     def predict_function(x):
         return model(x, training=False)
-    
+
     logger.info("DenseNet model loaded successfully")
+
 except Exception as e:
     logger.error(f"Error loading DenseNet model: {str(e)}")
     raise
