@@ -22,14 +22,24 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Configure TensorFlow to use less memory
-gpus = tf.config.list_physical_devices('GPU')
-if gpus:
-    try:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-    except RuntimeError as e:
-        logger.error(f"GPU memory configuration error: {e}")
+# Configure TensorFlow for better performance
+tf.config.optimizer.set_jit(True)  # Enable XLA optimization
+tf.config.optimizer.set_experimental_options({
+    "layout_optimizer": True,
+    "constant_folding": True,
+    "shape_optimization": True,
+    "remapping": True,
+    "arithmetic_optimization": True,
+    "dependency_optimization": True,
+    "loop_optimization": True,
+    "function_optimization": True,
+    "debug_stripper": True,
+    "disable_model_pruning": True,
+    "scoped_allocator_optimization": True,
+    "pin_to_host_optimization": True,
+    "implementation_selector": True,
+    "auto_mixed_precision": True
+})
 
 # Load DenseNet model with memory optimization
 try:
@@ -43,6 +53,12 @@ try:
         os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'tb_detector_model_densenet.h5'),
         compile=False  # Don't compile the model to save memory
     )
+    
+    # Create a prediction function
+    @tf.function
+    def predict_function(x):
+        return model(x, training=False)
+    
     logger.info("DenseNet model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading DenseNet model: {str(e)}")
@@ -117,16 +133,16 @@ def generate_lime_explanation(model, image_array):
         explainer = lime_image.LimeImageExplainer()
         explanation = explainer.explain_instance(
             image_array[0].astype('double'),
-            model.predict,
+            predict_function,  # Use the optimized prediction function
             top_labels=1,
             hide_color=0,
-            num_samples=100  # Reduced from 1000 to save memory
+            num_samples=50  # Reduced from 100 to make it faster
         )
         
         temp, mask = explanation.get_image_and_mask(
             explanation.top_labels[0],
             positive_only=True,
-            num_features=5,
+            num_features=3,  # Reduced from 5 to make it faster
             hide_rest=True
         )
         
@@ -138,7 +154,7 @@ def generate_lime_explanation(model, image_array):
 def save_plot_to_base64(fig):
     try:
         buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+        fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0, dpi=72)  # Reduced DPI for faster processing
         buf.seek(0)
         img_str = base64.b64encode(buf.read()).decode('utf-8')
         plt.close(fig)
@@ -151,7 +167,7 @@ def image_to_base64(img_array):
     try:
         img = Image.fromarray(img_array)
         buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        img.save(buf, format='PNG', optimize=True)  # Added optimize=True for faster processing
         buf.seek(0)
         img_str = base64.b64encode(buf.read()).decode('utf-8')
         return img_str
@@ -184,7 +200,7 @@ def predict():
             image_array = preprocess_image(image_bytes)
             
             logger.info("Making prediction")
-            prediction = model.predict(image_array, verbose=0)[0]  # Added verbose=0 to reduce logging
+            prediction = predict_function(image_array)[0]  # Use the optimized prediction function
             
             if len(prediction) == 1:
                 prob = float(prediction[0])
@@ -217,7 +233,7 @@ def predict():
             try:
                 logger.info("Generating LIME explanation")
                 lime_temp, lime_mask = generate_lime_explanation(model, image_array)
-                plt.figure(figsize=(10, 10))
+                plt.figure(figsize=(8, 8))  # Reduced figure size
                 plt.imshow(lime_temp)
                 plt.imshow(lime_mask, alpha=0.5)
                 plt.axis('off')
