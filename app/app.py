@@ -19,7 +19,12 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# Update CORS configuration to allow specific frontend domain
+CORS(app, resources={r"/*": {
+    "origins": ["https://tb-vision-x-ai-frontend.vercel.app"],
+    "methods": ["GET", "POST", "OPTIONS"],
+    "allow_headers": ["Content-Type"]
+}})
 
 # Load DenseNet model
 try:
