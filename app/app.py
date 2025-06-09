@@ -21,21 +21,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Load models
+# Load DenseNet model
 try:
     logger.info("Loading DenseNet model...")
-    densenet_model = tf.keras.models.load_model(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'tb_detector_model_densenet.h5'))
+    model = tf.keras.models.load_model(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'tb_detector_model_densenet.h5'))
     logger.info("DenseNet model loaded successfully")
 except Exception as e:
     logger.error(f"Error loading DenseNet model: {str(e)}")
-    raise
-
-try:
-    logger.info("Loading LeNet model...")
-    lenet_model = tf.keras.models.load_model(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'tb_detector_model_lenet.h5'))
-    logger.info("LeNet model loaded successfully")
-except Exception as e:
-    logger.error(f"Error loading LeNet model: {str(e)}")
     raise
 
 def preprocess_image(image_bytes):
@@ -138,12 +130,10 @@ def predict():
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
             
-        model_type = request.form.get('model', 'densenet')
         image_bytes = file.read()
         
         try:
             image_array = preprocess_image(image_bytes)
-            model = densenet_model if model_type == 'densenet' else lenet_model
             prediction = model.predict(image_array)[0]
             
             if len(prediction) == 1:
@@ -191,7 +181,6 @@ def predict():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-
     debug = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=debug) 
